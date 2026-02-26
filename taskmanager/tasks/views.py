@@ -1,59 +1,35 @@
-from django.shortcuts import render
-from rest_framework import generics
-from .models import Task
-from .serializers import TaskSerializer
-
-class TaskListCreateView(generics.ListCreateAPIView):
-    queryset = Task.objects.all()
-    serializer_class = TaskSerializer
-
-class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Task.objects.all()
-    serializer_class = TaskSerializer
-# Create your views here.
-
-from django.contrib.auth import authenticate
-from rest_framework.authtoken.models import Token
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.views import APIView
-from rest_framework import status
-from rest_framework.permissions import AllowAny
-from .serializers import UserSerializer
-
-class RegisterView(APIView):
-    permission_classes = [AllowAny]  # Anyone can register
-    def post(self, request):
-        serializer = UserSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-            token, _ = Token.objects.get_or_create(user=user)
-            return Response({'token': token.key}, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-class LoginView(APIView):
-    permission_classes = [AllowAny]  # Anyone can log in
-    def post(self, request):
-        username = request.data.get('username')
-        password = request.data.get('password')
-        user = authenticate(username=username, password=password)
-        if user:
-            token, _ = Token.objects.get_or_create(user=user)
-            return Response({'token': token.key}, status=status.HTTP_200_OK)
-        return Response({'error': 'Invalid Credentials'}, status=status.HTTP_400_BAD_REQUEST)
-    
-
-
-from rest_framework import generics
-from rest_framework.permissions import IsAuthenticated
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import OrderingFilter, SearchFilter
 from .models import Task
 from .serializers import TaskSerializer
+from .permissions import IsOwner
+from rest_framework.permissions import IsAuthenticated
 
-class TaskListCreateView(generics.ListCreateAPIView):
-    queryset = Task.objects.all()
+class TaskViewSet(viewsets.ModelViewSet):
     serializer_class = TaskSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsOwner]
+    filter_backends = [DjangoFilterBackend, OrderingFilter, SearchFilter]
+    filterset_fields = ['status','priority','due_date']
+    ordering_fields = ['due_date','priority']
+    search_fields = ['title','description']
 
-class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Task.objects.all()
-    serializer_class = TaskSerializer
-    permission_classes = [IsAuthenticated]    
+    def get_queryset(self):
+        return Task.objects.filter(owner=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
+    @action(detail=True, methods=['post'], url_path='toggle-complete')
+    def toggle_complete(self, request, pk=None):
+        task = self.get_object()
+        if task.status == 'pending':
+            task.mark_complete()
+            return Response({'status':'completed','completed_at':task.completed_at}, status=status.HTTP_200_OK)
+        else:
+            task.mark_incomplete()
+            return Response({'status':'pending'}, status=status.HTTP_200_OK)
+
+
