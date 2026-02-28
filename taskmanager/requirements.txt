@@ -1,7 +1,7 @@
 asgiref==3.11.0
 cffi==2.0.0
 cryptography==46.0.3
-Django==5.0.3
+Django==5.2.11
 django-environ==0.13.0
 django-taggit==6.1.0
 djangorestframework==3.16.1
@@ -17,3 +17,4 @@ pycparser==2.23
 sqlparse==0.5.5
 tzdata==2025.3
 whitenoise==6.11.0
+django-filter==25.2
