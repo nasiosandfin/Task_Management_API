@@ -1,35 +1,39 @@
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
+from django.contrib.auth.models import User
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.filters import OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import OrderingFilter, SearchFilter
+
 from .models import Task
-from .serializers import TaskSerializer
-from .permissions import IsOwner
-from rest_framework.permissions import IsAuthenticated
+from .serializers import TaskSerializer, UserSerializer
+
 
 class TaskViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint that allows users to view and manage their own tasks.
+    """
     serializer_class = TaskSerializer
-    permission_classes = [IsAuthenticated, IsOwner]
-    filter_backends = [DjangoFilterBackend, OrderingFilter, SearchFilter]
-    filterset_fields = ['status','priority','due_date']
-    ordering_fields = ['due_date','priority']
-    search_fields = ['title','description']
+    permission_classes = [IsAuthenticated]
+
+    # Add filtering, ordering, and pagination support
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ['status', 'priority']   # adjust to your Task model fields
+    ordering_fields = ['created_at', 'due_date']  # adjust to your Task model fields
+    ordering = ['-created_at']  # default ordering
 
     def get_queryset(self):
+        # Only return tasks owned by the logged-in user
         return Task.objects.filter(owner=self.request.user)
 
     def perform_create(self, serializer):
+        # Automatically assign the logged-in user as the task owner
         serializer.save(owner=self.request.user)
 
-    @action(detail=True, methods=['post'], url_path='toggle-complete')
-    def toggle_complete(self, request, pk=None):
-        task = self.get_object()
-        if task.status == 'pending':
-            task.mark_complete()
-            return Response({'status':'completed','completed_at':task.completed_at}, status=status.HTTP_200_OK)
-        else:
-            task.mark_incomplete()
-            return Response({'status':'pending'}, status=status.HTTP_200_OK)
 
-
+class UserViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint that allows admins to manage users.
+    """
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [IsAdminUser]
